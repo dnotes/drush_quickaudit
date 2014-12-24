@@ -15,7 +15,8 @@ function quickaudit_drush_command() {
       'compact-sparklines' => "Do not add spaces to sparklines. Good with --export --sparklines.",
       'delimiter' => "Set the delimiter between fields. Defaults to tab for export, line break for standard.",
       'export' => "Prepare data for export to spreadsheet: no-titles, oneline, fill-fields, raw outputs, tab delimited.",
-      'months' => "Number of months to query. Defaults to 12."
+      'months' => "Number of months to query. Defaults to 12.",
+      'types-lifetime' => "Show lifetime content types for comparison. Defaults to true unless oneline.",
     ),
     'examples' => array(
       'drush qa-content' => "A page of data about a site's content",
@@ -53,6 +54,7 @@ function drush_quickaudit_content() {
   $delimiter_default = $export ? "\t" : ($oneline ? " | " : "\n");
   $options['delimiter'] = $delimiter = drush_get_option('delimiter', $delimiter_default);
   $options['months'] = $months = drush_get_option('months', 12);
+  $options['types-lifetime'] = drush_get_option('types-lifetime', empty($oneline));
   
   // Find the starting date
   $starttime = strtotime("-$months months");
@@ -77,25 +79,51 @@ function drush_quickaudit_content() {
   $site_longevity = ($interval->y * 12) + $interval->m + 1;
   $months_for_calculation = min($months, $site_longevity);
   
-  // Get months
-  $output['life'] = $compact ? $site_longevity : "{$site_longevity}mo";
-  
   // Get status
   if (module_exists('incubator')) {
     $output['status'] = variable_get('incubator_disable_site', TRUE) ? 'disabled' : 'enabled';
   }
   
-  // Get total nodes
-  $output['nodes'] = $total_nodes;
+  // Get months
+  $output['lifetime'] = array(
+    'months' => ($compact ? $site_longevity : "{$site_longevity}mo"),
+    'nodes' => $all_published_nodes,
+    'npm' => round($all_published_nodes / $site_longevity, 1),
+  );
   
-  // Get nodes per month
+  if ($options['types-lifetime']) {
+    // ===========================================================================
+    // Node types
+    $nodes_by_type = db_query("SELECT type, COUNT(nid) count FROM {node} "
+        . "WHERE status GROUP BY type ORDER BY count DESC LIMIT 3")->fetchAllKeyed();
+    foreach ($nodes_by_type as $type => $count) {
+      $pct = round($count / $all_published_nodes, 2);
+      if ($pct > .30 || ($fill_fields && count($output['lifetime']['types']) < 3)) {
+        $output['lifetime']['types'][$type] = $raw_percentages ? $pct : ($raw_counts ? $count : $pct * 100 . '%');
+      }
+    }
+    $type_names = implode(',', array_keys($output['lifetime']['types']));
+    if ($fill_fields) {
+      while (count($output['lifetime']['types']) < 3) {
+        $output['lifetime']['types'][] = "0.00";
+      }
+    }
+    if ($no_titles) {
+      $output['lifetime']['types']['types'] = $type_names;
+    }
+  }
+  
+  
+  // Get months, nodes, and npm
+  $output['months'] = $months_for_calculation;
+  $output['nodes'] = $total_nodes;
   $npm = round($total_nodes / $months_for_calculation, 1);
   $output['npm'] = $export ? $npm : "{$npm}/m";
   
   // ===========================================================================
   // Node types
   $nodes_by_type = db_query("SELECT type, COUNT(nid) count FROM {node} "
-      . "WHERE status AND created >= :created GROUP BY type ORDER BY count DESC", array(':created' => $startdate))->fetchAllKeyed();
+      . "WHERE status AND created >= :created GROUP BY type ORDER BY count DESC LIMIT 3", array(':created' => $startdate))->fetchAllKeyed();
   foreach ($nodes_by_type as $type => $count) {
     $pct = round($count / $total_nodes, 2);
     if ($pct > .30 || ($fill_fields && count($output['types']) < 3)) {
