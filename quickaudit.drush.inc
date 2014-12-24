@@ -100,6 +100,8 @@ function drush_quickaudit_content() {
   $npm = round($total_nodes / $months_for_calculation, 1);
   $output['npm'] = $export ? $npm : "{$npm}/m";
   
+  // ===========================================================================
+  // Node types
   $nodes_by_type = db_query("SELECT type, COUNT(nid) count FROM {node} "
       . "WHERE status AND created >= :created GROUP BY type ORDER BY count DESC", array(':created' => $startdate))->fetchAllKeyed();
   foreach ($nodes_by_type as $type => $count) {
@@ -118,6 +120,8 @@ function drush_quickaudit_content() {
     $output['types']['types'] = $type_names;
   }
   
+  // ===========================================================================
+  // Authorship
   if (empty($total_nodes)) {
     $output['authors'] = $options['fill-fields'] ? array('user' => 0, 'group' => 0, 'other' => 0) : 0;
   }
