@@ -154,7 +154,7 @@ function drush_quickaudit_content() {
   }
 
   $output['update history'] = $output['create history'] = '';
-  $fill_months = $options['fill-fields'] ? $months : $months_for_calculation;
+  $fill_months = ($options['fill-fields'] && !$options['sparklines']) ? $months : $months_for_calculation;
   $nodes_created = $nodes_updated = _quickaudit_datearray($fill_months + 1);
 
   $nodes_created_counts = db_query('SELECT FROM_UNIXTIME(n.created, \'%Y-%m\') month, COUNT(n.nid) count
