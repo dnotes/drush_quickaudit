@@ -14,9 +14,11 @@ function quickaudit_drush_command() {
       'sparklines' => "Show sparklines where available, overriding raw options above.",
       'delimiter' => "Set the delimiter between fields. Defaults to tab for export, line break for standard.",
       'export' => "Prepare data for export to spreadsheet: no-titles, oneline, fill-fields, raw outputs, tab delimited.",
+      'months' => "Number of months to query. Defaults to 12."
     ),
     'examples' => array(
       'drush qa-content' => "A page of data about a site's content",
+      'drush qa-content --months=6' => "Page of data going back to the beginning of last " . date('F', strtotime("-6 months")),
       'drush qa-content --oneline --compact' => "Data on a single line with single letter titles",
       'drush qa-content --export' => "Data on a single line with no titles, ready for export to spreadsheet",
       'drush qa-content --export --sparklines' => "Data ready for export, but with sparklines where applicable",
@@ -45,17 +47,6 @@ function drush_quickaudit_content() {
   }
   $all_published_nodes_including_unpublished = db_query("SELECT COUNT(*) FROM {node}")->fetchField();
   
-  // Find the starting date
-  $curmonth = date('n');
-  $lastyear = date('Y', strtotime('-1 year'));
-  $startdate = mktime(0,0,0,$curmonth,1,$lastyear);
-
-  // Find the total number of nodes within the time period
-  $total_nodes = db_query("SELECT COUNT(*) FROM {node} WHERE status AND created >= :created", array(':created' => $startdate))->fetchField();
-  
-  global $base_url;
-  $output['url'] = preg_replace('|^.*://|', '', $base_url);
-  
   $options = array();
   $options['export'] = $export = drush_get_option('export');
   $options['oneline'] = $oneline = drush_get_option('oneline', !empty($export));
@@ -67,7 +58,21 @@ function drush_quickaudit_content() {
   $options['sparklines'] = $sparklines = drush_get_option('sparklines', !($raw_counts || $raw_percentages));
   $delimiter_default = $export ? "\t" : ($oneline ? " | " : "\n");
   $options['delimiter'] = $delimiter = drush_get_option('delimiter', $delimiter_default);
-  $options['months'] = $months = 13; // TODO: make this an option.
+  $options['months'] = $months = drush_get_option('months', 12);
+  
+  // Find the starting date
+  $starttime = strtotime("-$months months");
+  $calc_month = date('n', $starttime);
+  $calc_year = date('Y', $starttime);
+  $startdate = mktime(0,0,0,$calc_month,1,$calc_year);
+
+  // Find the total number of nodes within the time period
+  $total_nodes = db_query("SELECT COUNT(*) FROM {node} WHERE status AND created >= :created", array(':created' => $startdate))->fetchField();
+  
+  // Output the URL
+  global $base_url;
+  $output['url'] = preg_replace('|^.*://|', '', $base_url);
+  
 
   // Calculate site longevity by comparing the creation date of the first user to time().
   $then = new dateTime();
@@ -76,10 +81,10 @@ function drush_quickaudit_content() {
   $now->setTimestamp(time());
   $interval = $then->diff($now);
   $site_longevity = ($interval->y * 12) + $interval->m + 1;
-  $months_for_calculation = min($months, $site_longevity + 1);
+  $months_for_calculation = min($months, $site_longevity);
   
   // Get months
-  $output['months'] = $site_longevity;
+  $output['life'] = $compact ? $site_longevity : "{$site_longevity}mo";
   
   // Get status
   if (module_exists('incubator')) {
@@ -148,7 +153,7 @@ function drush_quickaudit_content() {
 
   $output['create history'] = $output['update history'] = '';
   $fill_months = $options['fill-fields'] ? $months : $months_for_calculation;
-  $nodes_created = $nodes_changed = _quickaudit_datearray($fill_months);
+  $nodes_created = $nodes_changed = _quickaudit_datearray($fill_months + 1);
 
   $nodes_created_counts = db_query('SELECT FROM_UNIXTIME(n.created, \'%Y-%m\') month, COUNT(n.nid) count
     FROM {node} n WHERE n.status = 1 AND n.created >= :startdate 
@@ -231,8 +236,11 @@ function _quickaudit_sparkline($values, $baseline, $options) {
       $output[] = $value / $baseline;
     }
     else {
-      $output[] = _quickaudit_sparkline_char($value / $baseline);
+      $output[$title] = $value;
     }
+  }
+  if (!($options['sparklines'] || $options['raw-counts'] || $options['raw-percentages'])) {
+    return $output;
   }
   $glue = $options['sparklines'] ? '' : ($options['export'] ? "\t" : ' ');
   return implode($glue, $output);
@@ -257,7 +265,7 @@ function _quickaudit_sparkline_char($percentage) {
   return $chars[$add];
 }
 
-function _quickaudit_datearray($num_months = 13) {
+function _quickaudit_datearray($num_months) {
   $m = date('n');
   $y = date('Y');
   for ($i = 1; $i <= $num_months; $i++) {
