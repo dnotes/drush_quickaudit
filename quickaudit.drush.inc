@@ -118,32 +118,35 @@ function drush_quickaudit_content() {
     $output['types']['types'] = $type_names;
   }
   
-  $nodes_by_user = db_query("SELECT u.name, COUNT(n.nid) count FROM {node} n LEFT JOIN {users} u ON n.uid = u.uid "
-      . "WHERE n.status AND n.created >= :created GROUP BY u.name ORDER BY count DESC LIMIT 0,5", array(':created' => $startdate))->fetchAllKeyed();
-  $x = 1;
-  $authors = array();
-  foreach ($nodes_by_user as $name => $count) {
-    if ($x == 1) {
-      $user_name = $compact ? 'user' : $name;
-      $authors[$user_name] = $count;
+  if (empty($total_nodes)) {
+    $output['authors'] = $options['fill-fields'] ? array('user' => 0, 'group' => 0, 'other' => 0) : 0;
+  }
+  else {
+    $nodes_by_user = db_query("SELECT u.name, COUNT(n.nid) count FROM {node} n LEFT JOIN {users} u ON n.uid = u.uid "
+        . "WHERE n.status AND n.created >= :created GROUP BY u.name ORDER BY count DESC LIMIT 0,5", array(':created' => $startdate))->fetchAllKeyed();
+    $x = 1;
+    foreach ($nodes_by_user as $name => $count) {
+      if ($x == 1) {
+        $user_name = $compact ? 'user' : $name;
+        $authors[$user_name] = $count;
+        $authors['group'] = 0;
+        $authors['other'] = 0;
+      }
+      else {
+        $authors['group'] += $count;
+      }
+      $x++;
+    }
+    $authors['other'] = $total_nodes - ($authors[$user_name] + $authors['group']);
+
+    if (empty($authors['group'])) {
       $authors['group'] = 0;
-      $authors['other'] = 0;
     }
-    else {
-      $authors['group'] += $count;
+    foreach ($authors as $name => $count) {
+      $pct = round($count / $total_nodes, 2);
+      $name = $compact ? substr($name, 0, 1) : $name;
+      $output['authors'][$name] = $raw_percentages ? $pct : ($raw_counts ? $count : $pct * 100 . '%');
     }
-    $x++;
-  }
-  
-  $authors['other'] = $total_nodes - ($authors[$user_name] + $authors['group']);
-  
-  if (empty($authors['group'])) {
-    $authors['group'] = 0;
-  }
-  foreach ($authors as $name => $count) {
-    $pct = round($count / $total_nodes, 2);
-    $name = $compact ? substr($name, 0, 1) : $name;
-    $output['authors'][$name] = $raw_percentages ? $pct : ($raw_counts ? $count : $pct * 100 . '%');
   }
 
   
