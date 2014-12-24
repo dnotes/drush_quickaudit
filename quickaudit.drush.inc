@@ -57,6 +57,7 @@ function drush_quickaudit_content() {
   $options['raw-percentages'] = $raw_percentages = drush_get_option('raw-percentages', !empty($export));
   $options['raw-counts'] = $raw_counts = drush_get_option('raw-counts', !empty($export));
   $options['sparklines'] = $sparklines = drush_get_option('sparklines', !($raw_counts || $raw_percentages));
+  $options['compact-sparklines'] = drush_get_option('compact-sparklines');
   $delimiter_default = $export ? "\t" : ($oneline ? " | " : "\n");
   $options['delimiter'] = $delimiter = drush_get_option('delimiter', $delimiter_default);
   $options['months'] = $months = drush_get_option('months', 12);
