@@ -12,6 +12,7 @@ function quickaudit_drush_command() {
       'raw-percentages' => "Show raw percentages where available.",
       'raw-counts' => "Show raw counts where available. Incompatible with showpcts.",
       'sparklines' => "Show sparklines where available, overriding raw options above.",
+      'compact-sparklines' => "Do not add spaces to sparklines. Good with --export --sparklines.",
       'delimiter' => "Set the delimiter between fields. Defaults to tab for export, line break for standard.",
       'export' => "Prepare data for export to spreadsheet: no-titles, oneline, fill-fields, raw outputs, tab delimited.",
       'months' => "Number of months to query. Defaults to 12."
@@ -145,15 +146,15 @@ function drush_quickaudit_content() {
   }
 
   
-  
+  // Set the baseline for sparklines, so that content can be evaluated compared to npm.
   $baseline = $npm < 6 ? $npm * 3 : $npm * 2;
   if ($baseline < 8) {
     $baseline = 8;
   }
 
-  $output['create history'] = $output['update history'] = '';
+  $output['update history'] = $output['create history'] = '';
   $fill_months = $options['fill-fields'] ? $months : $months_for_calculation;
-  $nodes_created = $nodes_changed = _quickaudit_datearray($fill_months + 1);
+  $nodes_created = $nodes_updated = _quickaudit_datearray($fill_months + 1);
 
   $nodes_created_counts = db_query('SELECT FROM_UNIXTIME(n.created, \'%Y-%m\') month, COUNT(n.nid) count
     FROM {node} n WHERE n.status = 1 AND n.created >= :startdate 
@@ -164,14 +165,14 @@ function drush_quickaudit_content() {
   $output['create history'] = _quickaudit_sparkline($nodes_created, $baseline, $options);
 
 
-  $nodes_changed_counts = db_query('SELECT FROM_UNIXTIME(n.changed, \'%Y-%m\') month, COUNT(n.nid) count
+  $nodes_updated_counts = db_query('SELECT FROM_UNIXTIME(n.changed, \'%Y-%m\') month, COUNT(n.nid) count
     FROM {node} n WHERE n.status = 1 AND n.changed >= :startdate 
     GROUP BY month ORDER BY month ASC', array(':startdate' => $startdate))->fetchAllKeyed();
-  foreach ($nodes_changed_counts as $month => $count) {
-    $nodes_changed[$month] = $count;
+  foreach ($nodes_updated_counts as $month => $count) {
+    $nodes_updated[$month] = $count;
   }
-  $output['update history'] = _quickaudit_sparkline($nodes_created, $baseline, $options);
-
+  $output['update history'] = _quickaudit_sparkline($nodes_updated, $baseline, $options);
+  
   $output = explode("\n", _quickaudit_format_output($output, $options));
   foreach ($output as $line) {
     drush_print($line);
@@ -193,7 +194,7 @@ function _quickaudit_format_output($input, $options = array(), $level = 0) {
   
   foreach ($input as $title => $value) {
     
-    // compact the title
+    // format the title
     if ($options['no-titles']) {
       $title = '';
     }
@@ -205,6 +206,8 @@ function _quickaudit_format_output($input, $options = array(), $level = 0) {
         $title = str_repeat('  ', $level) . $title;
       }
     }
+    
+    // handle arrays
     if (is_array($value)) {
       if ($options['export']) {
         $output[] = _quickaudit_format_output($value, $options, $level + 1);
@@ -216,6 +219,8 @@ function _quickaudit_format_output($input, $options = array(), $level = 0) {
         $output[] = $title . "\n" . _quickaudit_format_output($value, $options, $level + 1);
       }
     }
+    
+    // handle single values
     else {
       $output[] = $title . $line_delimiter . $value;
     }
@@ -242,7 +247,7 @@ function _quickaudit_sparkline($values, $baseline, $options) {
   if (!($options['sparklines'] || $options['raw-counts'] || $options['raw-percentages'])) {
     return $output;
   }
-  $glue = $options['sparklines'] ? '' : ($options['export'] ? "\t" : ' ');
+  $glue = $options['sparklines'] ? ($options['compact-sparklines'] ? '' : ' ') : ($options['export'] ? "\t" : ' ');
   return implode($glue, $output);
 }
 
