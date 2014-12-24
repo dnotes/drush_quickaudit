@@ -30,14 +30,6 @@ function quickaudit_drush_command() {
   return $items;
 }
 
-function drush_quickaudit_drush_help() {
-  switch ($section) {
-    case 'drush:quickaudit-content':
-      return dt("This command will do a quick audit of a site's content.");
-      break;
-  }
-}
-
 function drush_quickaudit_content() {
 
   // Find total nodes, in case there is nothing.
