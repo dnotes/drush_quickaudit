@@ -72,10 +72,10 @@ function drush_quickaudit_users() {
       }
     }
     $output = array('emails' => implode(', ', $emails));
-    return _quickaudit_format_output($output, $options);
+    drush_print(_quickaudit_format_output($output, $options));
   }
   else {
-    return "not yet implemented without --email-list option.";
+    drush_print("not yet implemented without --email-list option.");
   }
   
 }
