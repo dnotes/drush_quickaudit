@@ -33,7 +33,8 @@ function quickaudit_drush_command() {
     'options' => array(
       
       'email-list' => "One line, formatted list of names and email addresses only.",
-      'role' => "Specify a role name, e.g. --role=administrator.",
+      'roles' => 'Specify a comma-separated list of roles, e.g. --role="administrator,editor".',
+      'ignore-u1' => "Ignore user 1",
       
     ),
     'examples' => array(
@@ -47,32 +48,44 @@ function quickaudit_drush_command() {
 
 function drush_quickaudit_users() {
   $options = array();
-  $options['email-list'] = $email_list = drush_get_option('email-list');
-  $options['role'] = $role = drush_get_option('role');
+  $options['email-list'] = $email_list = drush_get_option('email-list', TRUE);
+  if ($roles = drush_get_option('roles')) {
+    $options['roles'] = $roles = array_map('trim', explode(',', $roles));
+  }
+  $options['ignore-u1'] = $ignore_u1 = drush_get_option('ignore-u1');
   
   $options['oneline'] = $options['no-titles'] = $options['compact'] = $options['export'] = TRUE;
   
   if ($email_list) {
     $emails = array();
-    if (empty($role)) {
-      $users = db_query('SELECT name, mail '
-          . 'FROM {users} '
-          . 'WHERE status')->fetchAllAssoc('name');
+    
+    $query = db_select('users', 'u');
+    $query->fields('u', array('uid', 'name', 'mail', 'created', 'access', 'login', 'status'));
+    $query->condition('u.status', 1);
+    
+    if (!empty($roles)) {
+      $query->distinct();
+      $query->join('users_roles', 'ur', 'ur.uid = u.uid');
+      $query->join('role', 'r', 'r.rid = ur.rid');
+      $query->condition('r.name', $roles);
     }
-    else {
-      $users = db_query('SELECT u.name username, u.mail '
-          . 'FROM {users} u '
-          . 'LEFT JOIN {users_roles} ur ON ur.uid = u.uid '
-          . 'LEFT JOIN {role} r ON r.rid = ur.rid '
-          . 'WHERE u.status AND r.name = :role', array(':role' => $role))->fetchAllAssoc('username');
+    
+    if (!empty($ignore_u1)) {
+      $query->condition('u.uid', 1, '!=');
     }
+    
+    $users = $query->execute()->fetchAllAssoc('uid');
+    
     if (!empty($users)) {
       foreach ($users as $u) {
         $emails[] = $u->mail;
       }
+      $output = array('emails' => implode(', ', $emails));
+      drush_print(_quickaudit_format_output($output, $options));
     }
-    $output = array('emails' => implode(', ', $emails));
-    drush_print(_quickaudit_format_output($output, $options));
+    else {
+      drush_print();
+    }
   }
   else {
     drush_print("not yet implemented without --email-list option.");
