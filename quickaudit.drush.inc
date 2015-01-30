@@ -28,7 +28,56 @@ function quickaudit_drush_command() {
     'aliases' => array('qa-content'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
   );
+  $items['quickaudit-users'] = array(
+    'description' => "Quick audit of a site's users",
+    'options' => array(
+      
+      'email-list' => "One line, formatted list of names and email addresses only.",
+      'role' => "Specify a role name, e.g. --role=administrator.",
+      
+    ),
+    'examples' => array(
+      
+    ),
+    'aliases' => array('qa-users'),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
+  );
   return $items;
+}
+
+function drush_quickaudit_users() {
+  $options = array();
+  $options['email-list'] = $email_list = drush_get_option('email-list');
+  $options['role'] = $role = drush_get_option('role');
+  
+  $options['oneline'] = $options['no-titles'] = $options['compact'] = $options['export'] = TRUE;
+  
+  if ($email_list) {
+    $emails = array();
+    if (empty($role)) {
+      $users = db_query('SELECT name, mail '
+          . 'FROM {users} '
+          . 'WHERE status')->fetchAllAssoc('name');
+    }
+    else {
+      $users = db_query('SELECT u.name username, u.mail '
+          . 'FROM {users} u '
+          . 'LEFT JOIN {users_roles} ur ON ur.uid = u.uid '
+          . 'LEFT JOIN {role} r ON r.rid = ur.rid '
+          . 'WHERE u.status AND r.name = :role', array(':role' => $role))->fetchAllAssoc('username');
+    }
+    if (!empty($users)) {
+      foreach ($users as $u) {
+        $emails[] = $u->mail;
+      }
+    }
+    $output = array('emails' => implode(', ', $emails));
+    return _quickaudit_format_output($output, $options);
+  }
+  else {
+    return "not yet implemented without --email-list option.";
+  }
+  
 }
 
 function drush_quickaudit_content() {
