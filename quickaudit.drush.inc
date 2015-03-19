@@ -32,9 +32,12 @@ function quickaudit_drush_command() {
     'description' => "Quick audit of a site's users",
     'options' => array(
       
+      'no-titles' => "Do not show titles.",
       'email-list' => "One line, formatted list of names and email addresses only.",
       'roles' => 'Specify a comma-separated list of roles, e.g. --role="administrator,editor".',
-      'ignore-u1' => "Ignore user 1",
+      'include-u1' => "Include user 1.",
+      'raw-usernames' => "Use raw usernames instead of realname field.",
+      'include-sitename' => "Include site name in results.",
       
     ),
     'examples' => array(
@@ -48,47 +51,77 @@ function quickaudit_drush_command() {
 
 function drush_quickaudit_users() {
   $options = array();
-  $options['email-list'] = $email_list = drush_get_option('email-list', TRUE);
+  $options['email-list'] = $email_list = drush_get_option('email-list', FALSE);
   if ($roles = drush_get_option('roles')) {
     $options['roles'] = $roles = array_map('trim', explode(',', $roles));
   }
-  $options['ignore-u1'] = $ignore_u1 = drush_get_option('ignore-u1');
+  $options['no-titles'] = $no_titles = drush_get_option('no-titles', FALSE);
+  $options['include-u1'] = $include_u1 = drush_get_option('include-u1', FALSE);
+  $options['raw-usernames'] = $raw_usernames = drush_get_option('raw-usernames', FALSE);
+  $options['include-sitename'] = $include_sitename = drush_get_option('include-sitename', FALSE);
   
-  $options['oneline'] = $options['no-titles'] = $options['compact'] = $options['export'] = TRUE;
+  $query = db_select('users', 'u');
+  $query->fields('u', array('uid', 'name', 'mail', 'created', 'access', 'login', 'status'));
+  $query->condition('u.status', 1);
+
+  if (!$raw_usernames && !$email_list && module_exists('realname')) {
+    $query->join('field_data_field_realname', 'f', 'f.entity_id = u.uid');
+    $query->addField('f', 'field_realname_value', 'realname');
+  }
+
+  if (!empty($roles)) {
+    $query->distinct();
+    $query->join('users_roles', 'ur', 'ur.uid = u.uid');
+    $query->join('role', 'r', 'r.rid = ur.rid');
+    $query->condition('r.name', $roles);
+  }
+
+  if (!$include_u1) {
+    $query->condition('u.uid', 1, '!=');
+  }
+
+  $users = $query->execute()->fetchAllAssoc('uid');
   
+  if (empty($users)) {
+    return;
+  }
+  
+  global $base_url;
+
   if ($email_list) {
     $emails = array();
-    
-    $query = db_select('users', 'u');
-    $query->fields('u', array('uid', 'name', 'mail', 'created', 'access', 'login', 'status'));
-    $query->condition('u.status', 1);
-    
-    if (!empty($roles)) {
-      $query->distinct();
-      $query->join('users_roles', 'ur', 'ur.uid = u.uid');
-      $query->join('role', 'r', 'r.rid = ur.rid');
-      $query->condition('r.name', $roles);
+    foreach ($users as $u) {
+      $emails[] = $u->mail;
     }
-    
-    if (!empty($ignore_u1)) {
-      $query->condition('u.uid', 1, '!=');
-    }
-    
-    $users = $query->execute()->fetchAllAssoc('uid');
-    
-    if (!empty($users)) {
-      foreach ($users as $u) {
-        $emails[] = $u->mail;
-      }
-      $output = array('emails' => implode(', ', $emails));
-      drush_print(_quickaudit_format_output($output, $options));
-    }
-    else {
-      drush_print();
-    }
+    $output = array('emails' => implode(', ', $emails));
+    $options['oneline'] = $options['no-titles'] = $options['compact'] = $options['export'] = TRUE;
+
+    drush_print(_quickaudit_format_output($output, $options));
   }
   else {
-    drush_print("not yet implemented without --email-list option.");
+    if (!$include_sitename) {
+      $output['site'] = $base_url;
+    }
+    if (!$no_titles) {
+      $output['titles'] = array(t('Name'), t('Email'), t('Created'), t('Last access'), t('Last login'));
+    }
+    if ($include_sitename) {
+      $output['titles'][] = t('Site');
+    }
+    foreach ($users as $u) {
+      $output["user: $u->name"] = array(
+        'name' => !empty($u->realname) ? $u->realname : $u->name,
+        'mail' => $u->mail,
+        'created' => $u->created ? format_date($u->created, 'custom', 'Y-m-d') : t('never'),
+        'access' => $u->access ? format_date($u->access, 'custom', 'Y-m-d') : t('never'),
+        'login' => $u->login ? format_date($u->login, 'custom', 'Y-m-d') : t('never'),
+      );
+      if ($include_sitename) {
+        $output["user: $u->name"]['site'] = $base_url;
+      }
+    }
+    $options['no-titles'] = $options['compact'] = TRUE;
+    drush_print(_quickaudit_format_output($output, $options));
   }
   
 }
