@@ -104,9 +104,9 @@ function drush_quickaudit_users() {
     }
     if (!$no_titles) {
       $output['titles'] = array(t('Name'), t('Email'), t('Created'), t('Last access'), t('Last login'));
-    }
-    if ($include_sitename) {
-      $output['titles'][] = t('Site');
+      if ($include_sitename) {
+        $output['titles'][] = t('Site');
+      }
     }
     foreach ($users as $u) {
       $output["user: $u->name"] = array(
