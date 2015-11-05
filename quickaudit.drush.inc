@@ -17,6 +17,8 @@ function quickaudit_drush_command() {
       'export' => "Prepare data for export to spreadsheet: no-titles, oneline, fill-fields, raw outputs, tab delimited.",
       'months' => "Number of months to query. Defaults to 12.",
       'types-lifetime' => "Show lifetime content types for comparison. Defaults to true unless oneline.",
+      'sponsor-emails' => "Include sponsor email.",
+      'admin-emails' => "Include admin emails",
     ),
     'examples' => array(
       'drush qa-content' => "A page of data about a site's content",
@@ -49,7 +51,7 @@ function quickaudit_drush_command() {
   return $items;
 }
 
-function drush_quickaudit_users() {
+function drush_quickaudit_users($return = FALSE) {
   $options = array();
   $options['email-list'] = $email_list = drush_get_option('email-list', FALSE);
   if ($roles = drush_get_option('roles')) {
@@ -95,8 +97,6 @@ function drush_quickaudit_users() {
     }
     $output = array('emails' => implode(', ', $emails));
     $options['oneline'] = $options['no-titles'] = $options['compact'] = $options['export'] = TRUE;
-
-    drush_print(_quickaudit_format_output($output, $options));
   }
   else {
     if (!$include_sitename) {
@@ -121,9 +121,12 @@ function drush_quickaudit_users() {
       }
     }
     $options['no-titles'] = $options['compact'] = TRUE;
-    drush_print(_quickaudit_format_output($output, $options));
   }
   
+  if ($return) {
+    return _quickaudit_format_output($output, $options);
+  }
+  drush_print(_quickaudit_format_output($output, $options));
 }
 
 function drush_quickaudit_content() {
@@ -295,6 +298,15 @@ function drush_quickaudit_content() {
     $nodes_updated[$month] = $count;
   }
   $output['update history'] = _quickaudit_sparkline($nodes_updated, $baseline, $options);
+  
+  if (drush_get_option('sponsor-emails', FALSE)) {
+    $output['sponsor email'] = variable_get('incubator_us_sponsor_email', '');
+  }
+  if (drush_get_option('admin-emails', FALSE)) {
+    drush_set_option('email-list', TRUE);
+    drush_set_option('roles', 'superadmin,administrator');
+    $output['admin emails'] = drush_quickaudit_users(TRUE);
+  }
   
   $output = explode("\n", _quickaudit_format_output($output, $options));
   foreach ($output as $line) {
