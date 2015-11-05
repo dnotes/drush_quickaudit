@@ -18,7 +18,7 @@ function quickaudit_drush_command() {
       'months' => "Number of months to query. Defaults to 12.",
       'types-lifetime' => "Show lifetime content types for comparison. Defaults to true unless oneline.",
       'sponsor-emails' => "Include sponsor email.",
-      'admin-emails' => "Include admin emails",
+      'admin-emails' => "Include admin emails.",
     ),
     'examples' => array(
       'drush qa-content' => "A page of data about a site's content",
